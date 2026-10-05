@@ -27,13 +27,20 @@ import {
 import { PResp, Resp } from "~/types"
 import LoginBg from "./LoginBg"
 import { createStorageSignal } from "@solid-primitives/storage"
-import { getSetting, getSettingBool } from "~/store"
+import { getSetting, getSettingBool, refreshSettings } from "~/store"
 import { SSOLogin } from "./SSOLogin"
 import { IoFingerPrint } from "solid-icons/io"
 const supported = () =>
   !!globalThis.PublicKeyCredential?.parseRequestOptionsFromJSON
 
 const Login = () => {
+  // FIX: 退出登录走的是纯 SPA 跳转（Header.tsx: to("/@login?redirect=...")），
+  // 本组件原本只能拿到 App 启动时缓存的 settings 快照。若管理员此后在后台
+  // 禁用了游客账号，getSettingBool("allow_guest") 仍是旧值，登录页就会照常
+  // 显示「以游客身份浏览」入口。每次进入登录页时重拉 /public/settings，
+  // 配合响应式 store（见 store/settings.ts）让 <Show> 条件即时更新；
+  // 拉取失败时静默保留旧值，绝不阻塞登录。
+  refreshSettings()
   const logos = getSetting("logo").split("\n")
   const logo = useColorModeValue(logos[0], logos.pop())
   const t = useT()

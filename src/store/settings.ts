@@ -1,15 +1,21 @@
-import { ext, recordToArray, strToRegExp } from "~/utils"
+import { createSignal } from "solid-js"
+import { ext, r, recordToArray, strToRegExp } from "~/utils"
 import { setBackendKind } from "~/utils/backend"
+import type { Resp } from "~/types"
 
-const settings: Record<string, string> = {}
+// FIX: `settings` used to be a plain module-level object, so getSetting() /
+// getSettingBool() built no reactive dependency. <Show when={getSettingBool(..)}>
+// therefore evaluated only once and never switched after setSettings().
+// Real-world symptom: an admin disables the guest user, logs out, and the login
+// page still shows "Browse as a guest" until a full page reload. Backing the
+// map with a signal makes every getSetting() read reactive.
+const [settings, setSettingsInternal] = createSignal<Record<string, string>>({})
 
 export const setSettings = (items: Record<string, string>) => {
-  Object.keys(items).forEach((key) => {
-    settings[key] = items[key]
-  })
+  setSettingsInternal((prev) => ({ ...prev, ...items }))
   // Detect backend kind (Go backend never returns the "backend" field)
-  setBackendKind(settings["backend"])
-  const version = settings["version"] || "Unknown"
+  setBackendKind(getSetting("backend"))
+  const version = getSetting("version") || "Unknown"
   console.log(
     `%c OpenList %c ${version} %c https://github.com/OpenListTeam/OpenList`,
     "color: #fff; background: #5f5f5f",
@@ -18,7 +24,17 @@ export const setSettings = (items: Record<string, string>) => {
   )
 }
 
-export const getSetting = (key: string) => settings[key] ?? ""
+// FIX: re-fetch /public/settings. Views rendered after a settings change — most
+// importantly the login page reached via an in-app logout (pure SPA navigation)
+// — otherwise keep using the snapshot taken at app startup.
+export const refreshSettings = async () => {
+  const resp = (await r.get("/public/settings")) as Resp<Record<string, string>>
+  if (resp.code === 200 && resp.data) {
+    setSettings(resp.data)
+  }
+}
+
+export const getSetting = (key: string) => settings()[key] ?? ""
 export const getSettingBool = (key: string) => {
   const value = getSetting(key)
   return value === "true" || value === "1"
