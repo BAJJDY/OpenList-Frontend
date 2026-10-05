@@ -27,7 +27,7 @@ import {
 import { PResp, Resp } from "~/types"
 import LoginBg from "./LoginBg"
 import { createStorageSignal } from "@solid-primitives/storage"
-import { getSetting, getSettingBool, refreshSettings } from "~/store"
+import { Me, getSetting, getSettingBool, refreshSettings } from "~/store"
 import { SSOLogin } from "./SSOLogin"
 import { IoFingerPrint } from "solid-icons/io"
 const supported = () =>
@@ -192,7 +192,32 @@ const Login = () => {
     window.removeEventListener("beforeunload", AuthnCleanUpHandler)
   })
 
+  // FIX: 已登录用户误入登录页时，点击「登录」不应再次要求输入账号密码。
+  // 先探测本地 token 是否仍然有效（/api/me）：
+  //   - 有效 → 直接按 redirect / base_path 跳回主页面，等价于刷新后的正常登录态；
+  //   - 无效 → 清除过期 token，继续走原有账号密码 / WebAuthn 流程。
+  const TryResumeSession = async (): Promise<boolean> => {
+    if (!localStorage.getItem("token")) return false
+    let resumed = false
+    handleRespWithoutAuthAndNotify(
+      (await r.get("/me")) as Resp<Me>,
+      () => {
+        resumed = true
+      },
+      () => {
+        // token 已失效：清掉，避免 axios 默认头继续携带脏 token。
+        changeToken()
+      },
+    )
+    if (resumed) {
+      notify.success(t("login.success"))
+      to(decodeURIComponent(searchParams.redirect || base_path || "/"), true)
+    }
+    return resumed
+  }
   const Login = async () => {
+    // FIX: 检测到已登录则直接跳转主页面，跳过账号密码校验。
+    if (await TryResumeSession()) return
     if (!useauthn()) {
       if (remember() === "true") {
         localStorage.setItem("username", username())
