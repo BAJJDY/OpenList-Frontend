@@ -330,19 +330,18 @@ const Login = () => {
             {ldapLoginTips}
           </Checkbox>
         </Show>
-        <Button
-          w="$full"
-          colorScheme="accent"
-          onClick={() => {
-            changeToken()
-            to(
-              decodeURIComponent(searchParams.redirect || base_path || "/"),
-              true,
-            )
-          }}
-        >
-          {t("login.use_guest")}
-        </Button>
+        <Show when={getSettingBool("allow_guest")}>
+          <Button
+            w="$full"
+            colorScheme="accent"
+            onClick={() => {
+              changeToken()
+              to(decodeURIComponent(base_path || "/"), true)
+            }}
+          >
+            {t("login.use_guest")}
+          </Button>
+        </Show>
         <Flex
           mt="$2"
           justifyContent="space-evenly"
